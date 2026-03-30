@@ -199,6 +199,7 @@ jobs:
           envs: DEPLOY_WORKDIR,DEPLOY_COMPOSE_FLAGS,ECR_REGISTRY,ECR_DOCKER_PASSWORD
           script: |
             set -euo pipefail
+            echo "=== Inicio despliegue remoto ==="
             WORKDIR="${DEPLOY_WORKDIR:-$HOME/plane}"
             mkdir -p "$WORKDIR"
             echo "$ECR_DOCKER_PASSWORD" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
@@ -251,3 +252,8 @@ jobs:
             docker compose $FLAGS pull api web worker beat-worker migrator proxy plane-mq plane-minio || docker compose $FLAGS pull
             docker compose $FLAGS run --rm migrator
             docker compose $FLAGS up -d plane-db plane-redis plane-mq plane-minio api worker beat-worker web proxy
+            echo "=== Estado en el servidor (docker compose ps) ==="
+            docker compose $FLAGS ps -a
+      - name: Despliegue SSH aplicado (solo runner)
+        run: |
+          echo "::notice title=EC2::Las imágenes se subieron a ECR en los otros jobs. El paso SSH ejecutó pull, migrator y compose up en el servidor. Si solo viste «Post job cleanup» en otro job, abre este job y el paso «SSH — docker login…»."
