@@ -1,7 +1,7 @@
 # Sobrescribe las imágenes de api y web para usar tu ECR.
-# Ejemplo en el servidor (ajusta rutas):
-#   docker compose -f /ruta/plane/docker-compose.yml -f /ruta/plane/docker-compose.ecr-override.yml pull
-#   docker compose -f ... -f ... up -d
+# Con Traefik + Let's Encrypt añade también docker-compose.traefik.yml (ver ese archivo).
+# Ejemplo:
+#   docker compose -f docker-compose.yml -f docker-compose.ecr-override.yml -f docker-compose.traefik.yml up -d
 #
 # Etiqueta "main" coincide con el workflow deploy-main-ecr.yml (también se publica el SHA del commit).
 
