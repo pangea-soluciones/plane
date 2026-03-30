@@ -1,23 +1,23 @@
-# Despliegue automático al hacer push a main:
+# Al hacer push a main:
 # - Construye en GitHub Actions y publica en ECR (sin compilar en el servidor; adecuado para instancias pequeñas, p. ej. Lightsail 2 GB).
 # - Imágenes: plane-api, plane-web, plane-proxy. Crea los tres repositorios en ECR (us-east-1) si no existen.
-# - Tras el push a ECR: SSH al servidor para docker compose pull/up (salvo que desactives el job).
+# - Despliegue por SSH al EC2: desactivado por defecto; solo corre si defines la variable ENABLE_EC2_DEPLOY=true.
 #
 # Secretos (Settings → Secrets and variables → Actions):
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — permisos ECR para push (p. ej. ecr:BatchCheckLayerAvailability, PutImage, …).
-#   DEPLOY_SSH_PRIVATE_KEY — clave privada PEM para SSH al EC2 (obligatoria para que el despliegue tenga éxito).
-#   DEPLOY_HOST (opcional) — misma IP/DNS del EC2 si no usas la variable del repo; el job acepta Variable o Secret.
+#   DEPLOY_SSH_PRIVATE_KEY — solo si ENABLE_EC2_DEPLOY=true: clave privada PEM para SSH al EC2.
+#   DEPLOY_HOST — solo si ENABLE_EC2_DEPLOY=true: IP o DNS del EC2 (Variable o Secret).
 #
 # Variables:
-#   ENABLE_EC2_DEPLOY — pon "false" para omitir por completo el job de despliegue por SSH (por defecto se ejecuta).
-#   DEPLOY_HOST — obligatoria: IP o DNS público del EC2. Ponla en Variables (Settings → Actions → Variables) con nombre exacto
-#     DEPLOY_HOST; si la creaste como Secret con el mismo nombre, el workflow también la lee (vars tiene prioridad si ambas existen).
+#   ENABLE_EC2_DEPLOY — pon exactamente "true" para ejecutar el job de despliegue por SSH tras el push a ECR. Sin eso, solo se generan imágenes.
+#   DEPLOY_HOST — si ENABLE_EC2_DEPLOY=true: IP o DNS público del EC2 (Variable o Secret).
 #     Si falta verás el error del job "Comprobar DEPLOY_HOST". Security group: TCP 22 abierto hacia Internet o rangos de GitHub.
 #   DEPLOY_USER — SSH (por defecto ubuntu).
 #   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto $HOME/plane del usuario SSH, p. ej. /home/ubuntu/plane).
 #   DEPLOY_COMPOSE_FLAGS — opcional; por defecto -f docker-compose.yml -f docker-compose.ecr-override.yml
-#   VITE_API_BASE_URL, VITE_WEB_BASE_URL — por defecto https://plane-api.yomogo.io y https://plane-web.yomogo.io
-#     (sobrescribibles con variables del repo).
+#   VITE_API_BASE_URL — si no la defines: cadena vacía en el build → el front llama al API en el mismo origen (/api/...).
+#     Solo pon URL absoluta si el API está en otro host (p. ej. subdominio aparte).
+#   VITE_WEB_BASE_URL — opcional; si no existe, el Dockerfile deja vacío (mismo criterio). Puedes fijar https://tu-dominio
 #   VITE_ADMIN_BASE_URL, VITE_SPACE_BASE_URL, VITE_LIVE_BASE_URL — opcionales si despliegas admin/space/live.
 #
 # En el servidor: variables según compose oficial (WEB_URL, CORS_ALLOWED_ORIGINS, CERT_EMAIL, APP_DOMAIN). Ver deployments/ec2/env.example.
@@ -32,7 +32,7 @@
 # Concurrency: cancel-in-progress en false evita que un segundo push a main mate el workflow anterior mientras aún construye (p. ej. pip en plane-api);
 # sin eso GitHub muestra "Error: The operation was canceled" a mitad del Docker build.
 
-name: Deploy main → ECR + servidor
+name: Build main → ECR (deploy EC2 opcional)
 
 on:
   push:
@@ -110,8 +110,8 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL || 'https://plane-api.yomogo.io' }}
-            VITE_WEB_BASE_URL=${{ vars.VITE_WEB_BASE_URL || 'https://plane-web.yomogo.io' }}
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+            VITE_WEB_BASE_URL=${{ vars.VITE_WEB_BASE_URL }}
             VITE_ADMIN_BASE_URL=${{ vars.VITE_ADMIN_BASE_URL }}
             VITE_LIVE_BASE_URL=${{ vars.VITE_LIVE_BASE_URL }}
             VITE_SPACE_BASE_URL=${{ vars.VITE_SPACE_BASE_URL }}
@@ -154,8 +154,8 @@ jobs:
     name: Desplegar en EC2
     needs: [build-push-api, build-push-web, build-push-proxy]
     runs-on: ubuntu-22.04
-    # Sin variable o distinta de "false": despliega por SSH. Requiere DEPLOY_SSH_PRIVATE_KEY; el token ECR sale del runner (no hace falta AWS CLI ni rol ECR en el servidor).
-    if: ${{ vars.ENABLE_EC2_DEPLOY != 'false' }}
+    # Solo si ENABLE_EC2_DEPLOY=true en Variables del repo. Requiere DEPLOY_SSH_PRIVATE_KEY y DEPLOY_HOST.
+    if: ${{ vars.ENABLE_EC2_DEPLOY == 'true' }}
     steps:
       - name: Credenciales AWS en el runner (mismas que el push a ECR)
         uses: aws-actions/configure-aws-credentials@v4
