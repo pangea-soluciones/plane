@@ -10,7 +10,7 @@
 #   ENABLE_EC2_DEPLOY — pon "false" para omitir por completo el job de despliegue por SSH (por defecto se ejecuta).
 #   DEPLOY_HOST — por defecto 3.80.135.252 si no defines la variable.
 #   DEPLOY_USER — SSH (por defecto ubuntu).
-#   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto /opt/plane en el script remoto).
+#   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto $HOME/plane del usuario SSH, p. ej. /home/ubuntu/plane).
 #   DEPLOY_COMPOSE_FLAGS — opcional; por defecto -f docker-compose.yml -f docker-compose.ecr-override.yml
 #   VITE_API_BASE_URL, VITE_WEB_BASE_URL — por defecto https://plane-api.yomogo.io y https://plane-web.yomogo.io
 #     (sobrescribibles con variables del repo).
@@ -141,9 +141,15 @@ jobs:
           envs: DEPLOY_WORKDIR,DEPLOY_COMPOSE_FLAGS,ECR_REGISTRY,ECR_DOCKER_PASSWORD
           script: |
             set -euo pipefail
-            WORKDIR="${DEPLOY_WORKDIR:-/opt/plane}"
+            WORKDIR="${DEPLOY_WORKDIR:-$HOME/plane}"
+            mkdir -p "$WORKDIR"
             echo "$ECR_DOCKER_PASSWORD" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
             cd "$WORKDIR"
+            if [ ! -f docker-compose.yml ]; then
+              echo "ERROR: No hay docker-compose.yml en $WORKDIR"
+              echo "Copia el compose base de Plane (p. ej. deployments/cli/community/docker-compose.yml) y deployments/ec2/docker-compose.ecr-override.yml, o define DEPLOY_WORKDIR apuntando a la carpeta correcta."
+              exit 1
+            fi
             FLAGS="${DEPLOY_COMPOSE_FLAGS:--f docker-compose.yml -f docker-compose.ecr-override.yml}"
             docker compose $FLAGS pull api web || docker compose $FLAGS pull
             docker compose $FLAGS up -d api web || docker compose $FLAGS up -d
