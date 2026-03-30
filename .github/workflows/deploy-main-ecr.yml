@@ -24,6 +24,9 @@
 # Si el override ECR en el servidor es viejo (solo api/web), bórralo para que se regenere o copia deployments/ec2/docker-compose.ecr-override.yml.
 #
 # En el EC2: Docker y Docker Compose v2. El login a ECR se hace con un token generado en GitHub (mismas credenciales que el push), sin IAM ECR en la instancia.
+#
+# Concurrency: cancel-in-progress en false evita que un segundo push a main mate el workflow anterior mientras aún construye (p. ej. pip en plane-api);
+# sin eso GitHub muestra "Error: The operation was canceled" a mitad del Docker build.
 
 name: Deploy main → ECR + servidor
 
@@ -34,7 +37,7 @@ on:
 
 concurrency:
   group: deploy-main-ecr-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read

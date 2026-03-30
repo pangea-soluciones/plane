@@ -37,7 +37,8 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # false: un push nuevo no cancela builds largos (Docker API pip, space/vite); evita "The operation was canceled".
+  cancel-in-progress: false
 
 env:
   TARGET_BRANCH: ${{ github.ref_name }}
