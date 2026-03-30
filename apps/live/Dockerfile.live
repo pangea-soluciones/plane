@@ -45,7 +45,8 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store CI=true pnpm install --o
 
 ENV TURBO_TELEMETRY_DISABLED=1
 
-RUN sh -c 'export NODE_OPTIONS="--max-old-space-size=12288" && exec pnpm turbo run build --filter=live'
+ENV NODE_OPTIONS="--max-old-space-size=12288"
+RUN pnpm turbo run build --filter=live
 
 # *****************************************************************************
 # STAGE 3: Run the project

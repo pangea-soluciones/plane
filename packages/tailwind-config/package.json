@@ -2,6 +2,7 @@
   "name": "@plane/tailwind-config",
   "version": "1.2.3",
   "private": true,
+  "type": "module",
   "description": "common tailwind configuration across monorepo",
   "license": "AGPL-3.0",
   "sideEffects": [

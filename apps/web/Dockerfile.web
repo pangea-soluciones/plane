@@ -70,7 +70,8 @@ ENV VITE_WEB_BASE_URL=$VITE_WEB_BASE_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV TURBO_TELEMETRY_DISABLED=1
 
-RUN sh -c 'export NODE_OPTIONS="--max-old-space-size=12288" && exec pnpm turbo run build --filter=web'
+ENV NODE_OPTIONS="--max-old-space-size=12288"
+RUN pnpm turbo run build --filter=web
 
 # *****************************************************************************
 # STAGE 3: Serve with nginx
