@@ -11,7 +11,11 @@
 #   DEPLOY_HOST — por defecto 3.80.135.252 si no defines la variable.
 #   DEPLOY_USER — SSH (por defecto ubuntu).
 #   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto /opt/plane en el script remoto).
-#   VITE_* — URLs del build del frontend (ver build-args del job web).
+#   VITE_API_BASE_URL, VITE_WEB_BASE_URL — por defecto https://plane-api.yomogo.io y https://plane-web.yomogo.io
+#     (sobrescribibles con variables del repo).
+#   VITE_ADMIN_BASE_URL, VITE_SPACE_BASE_URL, VITE_LIVE_BASE_URL — opcionales si despliegas admin/space/live.
+#
+# En el servidor, configura el API con CORS_ALLOWED_ORIGINS (o equivalente) incluyendo https://plane-web.yomogo.io.
 #
 # En el EC2: Docker, Docker Compose v2, AWS CLI y rol IAM de instancia con acceso de lectura a ECR (get-login + pull).
 
@@ -93,11 +97,11 @@ jobs:
           platforms: linux/amd64
           push: true
           build-args: |
-            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL || 'https://plane-api.yomogo.io' }}
+            VITE_WEB_BASE_URL=${{ vars.VITE_WEB_BASE_URL || 'https://plane-web.yomogo.io' }}
             VITE_ADMIN_BASE_URL=${{ vars.VITE_ADMIN_BASE_URL }}
             VITE_LIVE_BASE_URL=${{ vars.VITE_LIVE_BASE_URL }}
             VITE_SPACE_BASE_URL=${{ vars.VITE_SPACE_BASE_URL }}
-            VITE_WEB_BASE_URL=${{ vars.VITE_WEB_BASE_URL }}
           tags: |
             ${{ env.ECR_REGISTRY }}/plane-web:main
             ${{ env.ECR_REGISTRY }}/plane-web:${{ github.sha }}
