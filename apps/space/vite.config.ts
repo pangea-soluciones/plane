@@ -27,6 +27,14 @@ export default defineConfig(() => ({
   },
   build: {
     assetsInlineLimit: 0,
+    // En CI (Docker) reduce picos de memoria de Rollup; NODE_OPTIONS a veces no llega al pool de Vite.
+    ...(isCi
+      ? {
+          rollupOptions: {
+            maxParallelFileOps: 2,
+          },
+        }
+      : {}),
   },
   plugins: [reactRouter(), tsconfigPaths({ projects: [path.resolve(__dirname, "tsconfig.json")] })],
   resolve: {
