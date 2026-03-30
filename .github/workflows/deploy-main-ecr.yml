@@ -6,12 +6,13 @@
 # Secretos (Settings → Secrets and variables → Actions):
 #   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — permisos ECR para push (p. ej. ecr:BatchCheckLayerAvailability, PutImage, …).
 #   DEPLOY_SSH_PRIVATE_KEY — clave privada PEM para SSH al EC2 (obligatoria para que el despliegue tenga éxito).
+#   DEPLOY_HOST (opcional) — misma IP/DNS del EC2 si no usas la variable del repo; el job acepta Variable o Secret.
 #
 # Variables:
 #   ENABLE_EC2_DEPLOY — pon "false" para omitir por completo el job de despliegue por SSH (por defecto se ejecuta).
-#   DEPLOY_HOST — obligatoria: IP elástica o DNS público del EC2 actual. Al crear o cambiar de instancia la IP cambia;
-#     si falta o es la antigua verás "dial tcp …:22: i/o timeout". En el security group del EC2 debe haber entrada TCP 22
-#     desde Internet (p. ej. 0.0.0.0/0) o desde los rangos de GitHub Actions si restringes por IP.
+#   DEPLOY_HOST — obligatoria: IP o DNS público del EC2. Ponla en Variables (Settings → Actions → Variables) con nombre exacto
+#     DEPLOY_HOST; si la creaste como Secret con el mismo nombre, el workflow también la lee (vars tiene prioridad si ambas existen).
+#     Si falta verás el error del job "Comprobar DEPLOY_HOST". Security group: TCP 22 abierto hacia Internet o rangos de GitHub.
 #   DEPLOY_USER — SSH (por defecto ubuntu).
 #   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto $HOME/plane del usuario SSH, p. ej. /home/ubuntu/plane).
 #   DEPLOY_COMPOSE_FLAGS — opcional; por defecto -f docker-compose.yml -f docker-compose.ecr-override.yml
@@ -163,13 +164,16 @@ jobs:
           echo "ECR_DOCKER_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
 
       - name: Comprobar DEPLOY_HOST
+        env:
+          H_VAR: ${{ vars.DEPLOY_HOST }}
+          H_SEC: ${{ secrets.DEPLOY_HOST }}
         run: |
-          H="${{ vars.DEPLOY_HOST }}"
+          H="${H_VAR:-${H_SEC:-}}"
           if [ -z "$H" ]; then
-            echo "::error title=DEPLOY_HOST no definida::En GitHub: Settings → Secrets and variables → Actions → Variables. Crea DEPLOY_HOST con la IP pública o DNS del EC2 (cambia al sustituir la instancia)."
+            echo "::error title=DEPLOY_HOST no definida::En el repo: Settings → Secrets and variables → Actions → pestaña Variables: crea DEPLOY_HOST con la IP o DNS público del EC2. Si solo existe como Secret con el mismo nombre, también se usa."
             exit 1
           fi
-          echo "SSH destino: $H"
+          echo "DEPLOY_HOST definida; continuando con SSH."
 
       - name: SSH — docker login ECR, pull y compose up
         uses: appleboy/ssh-action@v1.2.0
@@ -179,7 +183,7 @@ jobs:
           ECR_REGISTRY: ${{ env.ECR_REGISTRY }}
           ECR_DOCKER_PASSWORD: ${{ env.ECR_DOCKER_PASSWORD }}
         with:
-          host: ${{ vars.DEPLOY_HOST }}
+          host: ${{ vars.DEPLOY_HOST || secrets.DEPLOY_HOST }}
           username: ${{ vars.DEPLOY_USER || 'ubuntu' }}
           timeout: 60s
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
