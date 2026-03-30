@@ -1,13 +1,26 @@
-# Sobrescribe las imágenes de api y web para usar tu ECR.
-# El TLS y el enrutamiento los gestiona el servicio `proxy` del compose oficial de Plane (Caddy / plane-proxy).
-# Ejemplo:
-#   docker compose -f docker-compose.yml -f docker-compose.ecr-override.yml up -d
+# Sobrescribe imágenes del backend para ECR (misma imagen que api en worker/beat/migrator).
+# Ajusta el proxy para que no exija space/admin/live si solo despliegas web + api.
 #
-# Etiqueta "main" coincide con el workflow deploy-main-ecr.yml (también se publica el SHA del commit).
+#   docker compose -f docker-compose.yml -f docker-compose.ecr-override.yml up -d
 
 services:
   api:
     image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-api:main
 
+  worker:
+    image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-api:main
+
+  beat-worker:
+    image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-api:main
+
+  migrator:
+    image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-api:main
+
   web:
     image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-web:main
+
+  # Compose upstream: proxy depende de space, admin, live. Sin ellos no arranca el proxy.
+  proxy:
+    depends_on:
+      - api
+      - web

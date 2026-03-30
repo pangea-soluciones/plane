@@ -16,7 +16,8 @@
 #     (sobrescribibles con variables del repo).
 #   VITE_ADMIN_BASE_URL, VITE_SPACE_BASE_URL, VITE_LIVE_BASE_URL — opcionales si despliegas admin/space/live.
 #
-# En el servidor: variables de entorno según el compose oficial (WEB_URL, CORS_ALLOWED_ORIGINS, CERT_EMAIL para el proxy/Caddy). Ver deployments/ec2/env.example.
+# En el servidor: variables según compose oficial (WEB_URL, CORS_ALLOWED_ORIGINS, CERT_EMAIL, APP_DOMAIN). Ver deployments/ec2/env.example.
+# Si el override ECR en el servidor es viejo (solo api/web), bórralo para que se regenere o copia deployments/ec2/docker-compose.ecr-override.yml.
 #
 # En el EC2: Docker y Docker Compose v2. El login a ECR se hace con un token generado en GitHub (mismas credenciales que el push), sin IAM ECR en la instancia.
 
@@ -158,8 +159,22 @@ jobs:
                 "  api:" \
                 "    image: ${{ env.ECR_REGISTRY }}/plane-api:main" \
                 "" \
+                "  worker:" \
+                "    image: ${{ env.ECR_REGISTRY }}/plane-api:main" \
+                "" \
+                "  beat-worker:" \
+                "    image: ${{ env.ECR_REGISTRY }}/plane-api:main" \
+                "" \
+                "  migrator:" \
+                "    image: ${{ env.ECR_REGISTRY }}/plane-api:main" \
+                "" \
                 "  web:" \
                 "    image: ${{ env.ECR_REGISTRY }}/plane-web:main" \
+                "" \
+                "  proxy:" \
+                "    depends_on:" \
+                "      - api" \
+                "      - web" \
                 > "$OVERRIDE"
             fi
             DEFAULT_FLAGS="-f docker-compose.yml -f docker-compose.ecr-override.yml"
@@ -168,5 +183,7 @@ jobs:
             else
               FLAGS="$DEFAULT_FLAGS"
             fi
-            docker compose $FLAGS pull api web || docker compose $FLAGS pull
-            docker compose $FLAGS up -d api web || docker compose $FLAGS up -d
+            # Stack mínimo CE: cola, minio, backend (api+workers), web, proxy. Migraciones antes del up.
+            docker compose $FLAGS pull api web worker beat-worker migrator proxy plane-mq plane-minio || docker compose $FLAGS pull
+            docker compose $FLAGS run --rm migrator
+            docker compose $FLAGS up -d plane-db plane-redis plane-mq plane-minio api worker beat-worker web proxy
