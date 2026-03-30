@@ -18,7 +18,7 @@
 #
 # En el servidor: variables de entorno según el compose oficial (WEB_URL, CORS_ALLOWED_ORIGINS, CERT_EMAIL para el proxy/Caddy). Ver deployments/ec2/env.example.
 #
-# En el EC2: Docker, Docker Compose v2, AWS CLI y rol IAM de instancia con acceso de lectura a ECR (get-login + pull).
+# En el EC2: Docker y Docker Compose v2. El login a ECR se hace con un token generado en GitHub (mismas credenciales que el push), sin IAM ECR en la instancia.
 
 name: Deploy main → ECR + servidor
 
@@ -111,26 +111,38 @@ jobs:
     name: Desplegar en EC2
     needs: [build-push-api, build-push-web]
     runs-on: ubuntu-22.04
-    # Sin variable o distinta de "false": despliega por SSH. Requiere secret DEPLOY_SSH_PRIVATE_KEY y AWS en el EC2 para ECR.
+    # Sin variable o distinta de "false": despliega por SSH. Requiere DEPLOY_SSH_PRIVATE_KEY; el token ECR sale del runner (no hace falta AWS CLI ni rol ECR en el servidor).
     if: ${{ vars.ENABLE_EC2_DEPLOY != 'false' }}
     steps:
-      # En el EC2: AWS CLI + rol IAM con ECR (GetAuthorizationToken, BatchGetImage, etc.) para docker login sin pasar claves desde GitHub.
+      - name: Credenciales AWS en el runner (mismas que el push a ECR)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Token ECR para docker login en el servidor
+        run: |
+          TOKEN=$(aws ecr get-login-password --region "${{ env.AWS_REGION }}")
+          echo "::add-mask::$TOKEN"
+          echo "ECR_DOCKER_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
+
       - name: SSH — docker login ECR, pull y compose up
         uses: appleboy/ssh-action@v1.2.0
         env:
           DEPLOY_WORKDIR: ${{ vars.DEPLOY_WORKDIR }}
           DEPLOY_COMPOSE_FLAGS: ${{ vars.DEPLOY_COMPOSE_FLAGS }}
+          ECR_REGISTRY: ${{ env.ECR_REGISTRY }}
+          ECR_DOCKER_PASSWORD: ${{ env.ECR_DOCKER_PASSWORD }}
         with:
           host: ${{ vars.DEPLOY_HOST || '3.80.135.252' }}
           username: ${{ vars.DEPLOY_USER || 'ubuntu' }}
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
-          envs: DEPLOY_WORKDIR,DEPLOY_COMPOSE_FLAGS
+          envs: DEPLOY_WORKDIR,DEPLOY_COMPOSE_FLAGS,ECR_REGISTRY,ECR_DOCKER_PASSWORD
           script: |
             set -euo pipefail
             WORKDIR="${DEPLOY_WORKDIR:-/opt/plane}"
-            REGION="${{ env.AWS_REGION }}"
-            REGISTRY="${{ env.ECR_REGISTRY }}"
-            aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+            echo "$ECR_DOCKER_PASSWORD" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
             cd "$WORKDIR"
             FLAGS="${DEPLOY_COMPOSE_FLAGS:--f docker-compose.yml -f docker-compose.ecr-override.yml}"
             docker compose $FLAGS pull api web || docker compose $FLAGS pull
