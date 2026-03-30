@@ -25,6 +25,10 @@
 #
 # En el EC2: Docker y Docker Compose v2. El login a ECR se hace con un token generado en GitHub (mismas credenciales que el push), sin IAM ECR en la instancia.
 #
+# IMPORTANTE — compose en el servidor: usa deployments/cli/community/docker-compose.yml como base, NO el docker-compose.yml raíz del repo.
+# El raíz define build: local (web/space/api…); en un EC2 pequeño compilar space tarda mucho y además appleboy/ssh-action cortaba el script a los 10 min
+# por defecto (command_timeout), mostrando "Run Command Timeout" aunque el build siguiera "bien" en el servidor.
+#
 # Concurrency: cancel-in-progress en false evita que un segundo push a main mate el workflow anterior mientras aún construye (p. ej. pip en plane-api);
 # sin eso GitHub muestra "Error: The operation was canceled" a mitad del Docker build.
 
@@ -189,6 +193,8 @@ jobs:
           host: ${{ vars.DEPLOY_HOST || secrets.DEPLOY_HOST }}
           username: ${{ vars.DEPLOY_USER || 'ubuntu' }}
           timeout: 60s
+          # Por defecto drone-ssh usa 10m para todo el script → "Run Command Timeout" en pull/migrator/up lentos.
+          command_timeout: 2h
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           envs: DEPLOY_WORKDIR,DEPLOY_COMPOSE_FLAGS,ECR_REGISTRY,ECR_DOCKER_PASSWORD
           script: |
@@ -197,6 +203,12 @@ jobs:
             mkdir -p "$WORKDIR"
             echo "$ECR_DOCKER_PASSWORD" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
             cd "$WORKDIR"
+            if [ -f docker-compose.yml ] && grep -qF './apps/space/Dockerfile.space' docker-compose.yml; then
+              echo 'ERROR: Este docker-compose.yml es el de desarrollo del monorepo (compila space en el servidor).'
+              echo 'Copia como base deployments/cli/community/docker-compose.yml y añade docker-compose.ecr-override.yml (ver deployments/ec2/).'
+              echo 'Así solo se hace pull de imágenes ECR; no compiles el front en el EC2.'
+              exit 1
+            fi
             if [ ! -f docker-compose.yml ]; then
               echo "ERROR: No hay docker-compose.yml en $WORKDIR"
               echo "Copia el compose base de Plane (deployments/cli/community/docker-compose.yml). El override ECR se genera solo si falta."
