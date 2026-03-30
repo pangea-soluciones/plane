@@ -9,7 +9,9 @@
 #
 # Variables:
 #   ENABLE_EC2_DEPLOY — pon "false" para omitir por completo el job de despliegue por SSH (por defecto se ejecuta).
-#   DEPLOY_HOST — por defecto 3.80.135.252 si no defines la variable.
+#   DEPLOY_HOST — obligatoria: IP elástica o DNS público del EC2 actual. Al crear o cambiar de instancia la IP cambia;
+#     si falta o es la antigua verás "dial tcp …:22: i/o timeout". En el security group del EC2 debe haber entrada TCP 22
+#     desde Internet (p. ej. 0.0.0.0/0) o desde los rangos de GitHub Actions si restringes por IP.
 #   DEPLOY_USER — SSH (por defecto ubuntu).
 #   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto $HOME/plane del usuario SSH, p. ej. /home/ubuntu/plane).
 #   DEPLOY_COMPOSE_FLAGS — opcional; por defecto -f docker-compose.yml -f docker-compose.ecr-override.yml
@@ -160,6 +162,15 @@ jobs:
           echo "::add-mask::$TOKEN"
           echo "ECR_DOCKER_PASSWORD=$TOKEN" >> "$GITHUB_ENV"
 
+      - name: Comprobar DEPLOY_HOST
+        run: |
+          H="${{ vars.DEPLOY_HOST }}"
+          if [ -z "$H" ]; then
+            echo "::error title=DEPLOY_HOST no definida::En GitHub: Settings → Secrets and variables → Actions → Variables. Crea DEPLOY_HOST con la IP pública o DNS del EC2 (cambia al sustituir la instancia)."
+            exit 1
+          fi
+          echo "SSH destino: $H"
+
       - name: SSH — docker login ECR, pull y compose up
         uses: appleboy/ssh-action@v1.2.0
         env:
@@ -168,8 +179,9 @@ jobs:
           ECR_REGISTRY: ${{ env.ECR_REGISTRY }}
           ECR_DOCKER_PASSWORD: ${{ env.ECR_DOCKER_PASSWORD }}
         with:
-          host: ${{ vars.DEPLOY_HOST || '3.80.135.252' }}
+          host: ${{ vars.DEPLOY_HOST }}
           username: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+          timeout: 60s
           key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           envs: DEPLOY_WORKDIR,DEPLOY_COMPOSE_FLAGS,ECR_REGISTRY,ECR_DOCKER_PASSWORD
           script: |
