@@ -1,3 +1,9 @@
+# Docker Hub = registro público de imágenes Docker (docker.io). Este workflow sube ahí (acción makeplane/build-push).
+# Si solo despliegas con «Deploy main → ECR + servidor» (AWS ECR), NO necesitas Docker Hub ni este workflow en automático.
+#
+# Sin push a preview/canary: evita errores «Username and password required» en cada commit. Para publicar en Docker Hub a mano:
+#   Actions → Branch Build CE → Run workflow (y define DOCKERHUB_USERNAME + DOCKERHUB_TOKEN en Secrets).
+#
 name: Branch Build CE
 
 on:
@@ -30,10 +36,6 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    branches:
-      - preview
-      - canary
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -47,6 +49,7 @@ env:
   RELEASE_VERSION: ${{ github.event.inputs.releaseVersion }}
   IS_PRERELEASE: ${{ github.event.inputs.isPrerelease }}
   AIO_BUILD: ${{ github.event.inputs.aio_build }}
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   branch_build_setup:
@@ -74,6 +77,16 @@ jobs:
       aio_build: ${{ steps.set_env_variables.outputs.AIO_BUILD }}
 
     steps:
+      - name: Comprobar Docker Hub (secretos del repo)
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "${DH_USER}" ] || [ -z "${DH_TOKEN}" ]; then
+            echo "::error title=Docker Hub::Faltan DOCKERHUB_USERNAME y/o DOCKERHUB_TOKEN. En GitHub: Settings → Secrets and variables → Actions → Secrets. Crea un Access Token en https://hub.docker.com/settings/security"
+            exit 1
+          fi
+
       - id: set_env_variables
         name: Set Environment Variables
         run: |
