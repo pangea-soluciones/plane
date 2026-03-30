@@ -147,9 +147,20 @@ jobs:
             cd "$WORKDIR"
             if [ ! -f docker-compose.yml ]; then
               echo "ERROR: No hay docker-compose.yml en $WORKDIR"
-              echo "Copia el compose base de Plane (p. ej. deployments/cli/community/docker-compose.yml) y deployments/ec2/docker-compose.ecr-override.yml, o define DEPLOY_WORKDIR apuntando a la carpeta correcta."
+              echo "Copia el compose base de Plane (deployments/cli/community/docker-compose.yml). El override ECR se genera solo si falta."
               exit 1
             fi
-            FLAGS="${DEPLOY_COMPOSE_FLAGS:--f docker-compose.yml -f docker-compose.ecr-override.yml}"
+            OVERRIDE="${WORKDIR}/docker-compose.ecr-override.yml"
+            if [ ! -f "$OVERRIDE" ]; then
+              echo "Generando $OVERRIDE (imágenes ${{ env.ECR_REGISTRY }})"
+              printf '%s\n' \
+                "services:" \
+                "  api:" \
+                "    image: ${{ env.ECR_REGISTRY }}/plane-api:main" \
+                "" \
+                "  web:" \
+                "    image: ${{ env.ECR_REGISTRY }}/plane-web:main" \
+                > "$OVERRIDE"
+            fi
             docker compose $FLAGS pull api web || docker compose $FLAGS pull
             docker compose $FLAGS up -d api web || docker compose $FLAGS up -d
