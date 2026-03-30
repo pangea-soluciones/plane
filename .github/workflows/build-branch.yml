@@ -184,6 +184,7 @@ jobs:
   branch_build_push_space:
     name: Build-Push Space Docker Image
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     needs: [branch_build_setup]
     steps:
       - name: Space Build and Push
