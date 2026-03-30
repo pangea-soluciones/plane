@@ -1,0 +1,13 @@
+# Sobrescribe las imágenes de api y web para usar tu ECR.
+# Ejemplo en el servidor (ajusta rutas):
+#   docker compose -f /ruta/plane/docker-compose.yml -f /ruta/plane/docker-compose.ecr-override.yml pull
+#   docker compose -f ... -f ... up -d
+#
+# Etiqueta "main" coincide con el workflow deploy-main-ecr.yml (también se publica el SHA del commit).
+
+services:
+  api:
+    image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-api:main
+
+  web:
+    image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-web:main

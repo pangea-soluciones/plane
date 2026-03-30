@@ -1,0 +1,130 @@
+# Despliegue automático al hacer push a main:
+# - Construye y publica imágenes en ECR (plane-api, plane-web).
+# - Opcional: SSH al servidor para pull y docker compose up.
+#
+# Secretos (Settings → Secrets and variables → Actions):
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY — permisos ECR para push (p. ej. ecr:BatchCheckLayerAvailability, PutImage, …).
+#   DEPLOY_SSH_PRIVATE_KEY — clave privada PEM para SSH al EC2 (solo si ENABLE_EC2_DEPLOY=true).
+#
+# Variables:
+#   ENABLE_EC2_DEPLOY — pon "true" cuando el servidor esté listo (SSH + docker compose + imágenes ECR en el compose).
+#   DEPLOY_HOST — por defecto 3.80.135.252 si no defines la variable.
+#   DEPLOY_USER — SSH (por defecto ubuntu).
+#   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto /opt/plane en el script remoto).
+#   VITE_* — URLs del build del frontend (ver build-args del job web).
+#
+# En el EC2: Docker, Docker Compose v2, AWS CLI y rol IAM de instancia con acceso de lectura a ECR (get-login + pull).
+
+name: Deploy main → ECR + servidor
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-main-ecr-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 396608806728.dkr.ecr.us-east-1.amazonaws.com
+
+jobs:
+  build-push-api:
+    name: Build y push plane-api
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build y push API
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/api
+          file: ./apps/api/Dockerfile.api
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/plane-api:main
+            ${{ env.ECR_REGISTRY }}/plane-api:${{ github.sha }}
+
+  build-push-web:
+    name: Build y push plane-web
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build y push Web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./apps/web/Dockerfile.web
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=${{ vars.VITE_API_BASE_URL }}
+            VITE_ADMIN_BASE_URL=${{ vars.VITE_ADMIN_BASE_URL }}
+            VITE_LIVE_BASE_URL=${{ vars.VITE_LIVE_BASE_URL }}
+            VITE_SPACE_BASE_URL=${{ vars.VITE_SPACE_BASE_URL }}
+            VITE_WEB_BASE_URL=${{ vars.VITE_WEB_BASE_URL }}
+          tags: |
+            ${{ env.ECR_REGISTRY }}/plane-web:main
+            ${{ env.ECR_REGISTRY }}/plane-web:${{ github.sha }}
+
+  deploy-ec2:
+    name: Desplegar en EC2
+    needs: [build-push-api, build-push-web]
+    runs-on: ubuntu-22.04
+    # Pon ENABLE_EC2_DEPLOY=true en Variables del repo cuando el servidor y DEPLOY_SSH_PRIVATE_KEY estén listos.
+    if: ${{ vars.ENABLE_EC2_DEPLOY == 'true' }}
+    steps:
+      # En el EC2: AWS CLI + rol IAM con ECR (GetAuthorizationToken, BatchGetImage, etc.) para docker login sin pasar claves desde GitHub.
+      - name: SSH — docker login ECR, pull y compose up
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DEPLOY_WORKDIR: ${{ vars.DEPLOY_WORKDIR }}
+        with:
+          host: ${{ vars.DEPLOY_HOST || '3.80.135.252' }}
+          username: ${{ vars.DEPLOY_USER || 'ubuntu' }}
+          key: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          envs: DEPLOY_WORKDIR
+          script: |
+            set -euo pipefail
+            WORKDIR="${DEPLOY_WORKDIR:-/opt/plane}"
+            REGION="${{ env.AWS_REGION }}"
+            REGISTRY="${{ env.ECR_REGISTRY }}"
+            aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+            cd "$WORKDIR"
+            docker compose pull api web || docker compose pull
+            docker compose up -d api web || docker compose up -d
