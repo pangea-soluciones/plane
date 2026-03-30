@@ -19,8 +19,9 @@ services:
   web:
     image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-web:main
 
-  # Compose upstream: proxy depende de space, admin, live. Sin ellos no arranca el proxy.
+  # Imagen Caddy CE construida en CI y subida a ECR (workflow deploy-main-ecr.yml).
   proxy:
+    image: 396608806728.dkr.ecr.us-east-1.amazonaws.com/plane-proxy:main
     depends_on:
       - api
       - web

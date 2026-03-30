@@ -1,5 +1,6 @@
 # Despliegue automático al hacer push a main:
-# - Construye y publica imágenes en ECR (plane-api, plane-web).
+# - Construye en GitHub Actions y publica en ECR (sin compilar en el servidor; adecuado para instancias pequeñas, p. ej. Lightsail 2 GB).
+# - Imágenes: plane-api, plane-web, plane-proxy. Crea los tres repositorios en ECR (us-east-1) si no existen.
 # - Tras el push a ECR: SSH al servidor para docker compose pull/up (salvo que desactives el job).
 #
 # Secretos (Settings → Secrets and variables → Actions):
@@ -108,9 +109,40 @@ jobs:
             ${{ env.ECR_REGISTRY }}/plane-web:main
             ${{ env.ECR_REGISTRY }}/plane-web:${{ github.sha }}
 
+  build-push-proxy:
+    name: Build y push plane-proxy (Caddy)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build y push proxy CE
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/proxy
+          file: ./apps/proxy/Dockerfile.ce
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/plane-proxy:main
+            ${{ env.ECR_REGISTRY }}/plane-proxy:${{ github.sha }}
+
   deploy-ec2:
     name: Desplegar en EC2
-    needs: [build-push-api, build-push-web]
+    needs: [build-push-api, build-push-web, build-push-proxy]
     runs-on: ubuntu-22.04
     # Sin variable o distinta de "false": despliega por SSH. Requiere DEPLOY_SSH_PRIVATE_KEY; el token ECR sale del runner (no hace falta AWS CLI ni rol ECR en el servidor).
     if: ${{ vars.ENABLE_EC2_DEPLOY != 'false' }}
@@ -172,6 +204,7 @@ jobs:
                 "    image: ${{ env.ECR_REGISTRY }}/plane-web:main" \
                 "" \
                 "  proxy:" \
+                "    image: ${{ env.ECR_REGISTRY }}/plane-proxy:main" \
                 "    depends_on:" \
                 "      - api" \
                 "      - web" \
