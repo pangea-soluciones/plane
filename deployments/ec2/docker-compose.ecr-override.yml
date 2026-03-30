@@ -1,7 +1,7 @@
 # Sobrescribe las imágenes de api y web para usar tu ECR.
-# Con Traefik + Let's Encrypt añade también docker-compose.traefik.yml (ver ese archivo).
+# El TLS y el enrutamiento los gestiona el servicio `proxy` del compose oficial de Plane (Caddy / plane-proxy).
 # Ejemplo:
-#   docker compose -f docker-compose.yml -f docker-compose.ecr-override.yml -f docker-compose.traefik.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.ecr-override.yml up -d
 #
 # Etiqueta "main" coincide con el workflow deploy-main-ecr.yml (también se publica el SHA del commit).
 

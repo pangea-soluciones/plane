@@ -11,13 +11,12 @@
 #   DEPLOY_HOST — por defecto 3.80.135.252 si no defines la variable.
 #   DEPLOY_USER — SSH (por defecto ubuntu).
 #   DEPLOY_WORKDIR — carpeta del compose en el servidor (por defecto /opt/plane en el script remoto).
-#   DEPLOY_COMPOSE_FLAGS — opcional; por defecto -f docker-compose.yml -f docker-compose.ecr-override.yml -f docker-compose.traefik.yml
+#   DEPLOY_COMPOSE_FLAGS — opcional; por defecto -f docker-compose.yml -f docker-compose.ecr-override.yml
 #   VITE_API_BASE_URL, VITE_WEB_BASE_URL — por defecto https://plane-api.yomogo.io y https://plane-web.yomogo.io
 #     (sobrescribibles con variables del repo).
 #   VITE_ADMIN_BASE_URL, VITE_SPACE_BASE_URL, VITE_LIVE_BASE_URL — opcionales si despliegas admin/space/live.
 #
-# En el servidor: CORS_ALLOWED_ORIGINS y WEB_URL hacia https://plane-web.yomogo.io; .env con ACME_EMAIL y hosts (deployments/ec2/env.example).
-# Traefik (deployments/ec2/docker-compose.traefik.yml): TLS automático Let's Encrypt; el servicio proxy de Plane queda en profile (no usar 80/443 con él).
+# En el servidor: variables de entorno según el compose oficial (WEB_URL, CORS_ALLOWED_ORIGINS, CERT_EMAIL para el proxy/Caddy). Ver deployments/ec2/env.example.
 #
 # En el EC2: Docker, Docker Compose v2, AWS CLI y rol IAM de instancia con acceso de lectura a ECR (get-login + pull).
 
@@ -133,6 +132,6 @@ jobs:
             REGISTRY="${{ env.ECR_REGISTRY }}"
             aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
             cd "$WORKDIR"
-            FLAGS="${DEPLOY_COMPOSE_FLAGS:--f docker-compose.yml -f docker-compose.ecr-override.yml -f docker-compose.traefik.yml}"
-            docker compose $FLAGS pull
-            docker compose $FLAGS up -d
+            FLAGS="${DEPLOY_COMPOSE_FLAGS:--f docker-compose.yml -f docker-compose.ecr-override.yml}"
+            docker compose $FLAGS pull api web || docker compose $FLAGS pull
+            docker compose $FLAGS up -d api web || docker compose $FLAGS up -d
