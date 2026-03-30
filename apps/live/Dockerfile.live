@@ -44,9 +44,8 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store pnpm fetch --store-dir=/
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store CI=true pnpm install --offline --frozen-lockfile --store-dir=/pnpm/store
 
 ENV TURBO_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=8192"
 
-RUN pnpm turbo run build --filter=live
+RUN sh -c 'export NODE_OPTIONS="--max-old-space-size=12288" && exec pnpm turbo run build --filter=live'
 
 # *****************************************************************************
 # STAGE 3: Run the project
