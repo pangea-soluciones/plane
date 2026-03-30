@@ -139,7 +139,6 @@ jobs:
   branch_build_push_admin:
     name: Build-Push Admin Docker Image
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
     needs: [branch_build_setup]
     steps:
       - name: Admin Build and Push
@@ -184,7 +183,7 @@ jobs:
   branch_build_push_space:
     name: Build-Push Space Docker Image
     runs-on: ubuntu-22.04
-    timeout-minutes: 60
+    # Sin límite explícito: el default de GitHub-hosted es 360 min. 60 min cortaba el RUN de turbo/vite (Run Command Timeout).
     needs: [branch_build_setup]
     steps:
       - name: Space Build and Push
