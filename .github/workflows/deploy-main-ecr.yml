@@ -162,5 +162,11 @@ jobs:
                 "    image: ${{ env.ECR_REGISTRY }}/plane-web:main" \
                 > "$OVERRIDE"
             fi
+            DEFAULT_FLAGS="-f docker-compose.yml -f docker-compose.ecr-override.yml"
+            if [ -n "${DEPLOY_COMPOSE_FLAGS:-}" ]; then
+              FLAGS="$DEPLOY_COMPOSE_FLAGS"
+            else
+              FLAGS="$DEFAULT_FLAGS"
+            fi
             docker compose $FLAGS pull api web || docker compose $FLAGS pull
             docker compose $FLAGS up -d api web || docker compose $FLAGS up -d
