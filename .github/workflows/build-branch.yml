@@ -139,6 +139,7 @@ jobs:
   branch_build_push_admin:
     name: Build-Push Admin Docker Image
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     needs: [branch_build_setup]
     steps:
       - name: Admin Build and Push

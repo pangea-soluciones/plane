@@ -5,7 +5,11 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import { joinUrlPath } from "@plane/utils";
 
-dotenv.config({ path: path.resolve(__dirname, ".env") });
+// En CI / Docker (CI=1) las VITE_* vienen del entorno; evitar dotenv y posprocesos que pueden alargar o bloquear el cierre del build.
+const isCi = process.env.CI === "true" || process.env.CI === "1";
+if (!isCi) {
+  dotenv.config({ path: path.resolve(__dirname, ".env") });
+}
 
 // Expose only vars starting with VITE_
 const viteEnv = Object.keys(process.env)
